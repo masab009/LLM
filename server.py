@@ -30,7 +30,7 @@ import uvicorn
 from vllm import SamplingParams
 from vllm.engine.async_llm_engine import AsyncLLMEngine
 from vllm.engine.arg_utils import AsyncEngineArgs
-from vllm.sampling_params import GuidedDecodingParams
+from vllm.sampling_params import StructuredOutputsParams
 from transformers import AutoTokenizer, AutoConfig, AutoModelForCausalLM
 from loguru import logger
 
@@ -42,7 +42,7 @@ print(f"Using model: {MODEL_NAME}")
 DTYPE = os.getenv("DTYPE", "bfloat16")
 
 MAX_MODEL_LEN = int(os.getenv("MAX_MODEL_LEN", "4096"))
-GPU_MEM_UTIL = float(os.getenv("GPU_MEM_UTIL", "0.97"))
+GPU_MEM_UTIL = float(os.getenv("GPU_MEM_UTIL", "0.95"))
 CPU_OFFLOAD_GB = float(os.getenv("CPU_OFFLOAD_GB", "0"))
 
 # KV_CACHE_BYTES = int(os.getenv("KV_CACHE_BYTES", None))
@@ -276,8 +276,7 @@ async def generate(body: GenerateIn, request: Request):
         raise HTTPException(400, "Send exactly one prompt per request")
     raw = raws[0]
 
-    # Always use chat template for Gemma when structured output is needed
-    use_chat = True
+    use_chat = _should_apply_chat_template(MODEL_NAME, body.chat)
 
     # Log what's being sent to the LLM
     logger.info(f"[REQ] INPUT → user_content: {raw!r}")
@@ -305,16 +304,11 @@ async def generate(body: GenerateIn, request: Request):
 
     # 1) If backend sends a JSON SCHEMA (your MQG case), pass it straight to vLLM
     if body.guided_json_schema is not None:
-        # body.guided_json_schema is already a full JSON Schema
-        guided = GuidedDecodingParams(json=body.guided_json_schema)
-
-    # 2) If someone sends a simple example JSON / pattern
+        guided = StructuredOutputsParams(json=body.guided_json_schema)
     elif body.guided_json is not None:
-        guided = GuidedDecodingParams(json=body.guided_json)
-
-    # 3) Or "any valid JSON object"
+        guided = StructuredOutputsParams(json=body.guided_json)
     elif body.json_object:
-        guided = GuidedDecodingParams(json_object=True)
+        guided = StructuredOutputsParams(json_object=True)
 
     sp = SamplingParams(
         max_tokens=body.max_tokens,
@@ -325,7 +319,7 @@ async def generate(body: GenerateIn, request: Request):
         ignore_eos=bool(body.ignore_eos) if body.ignore_eos is not None else False,
         logprobs=int(body.logprobs or 0),
         prompt_logprobs=None,
-        guided_decoding=guided,
+        structured_outputs=guided,
     )
 
     t_req = time.perf_counter()
