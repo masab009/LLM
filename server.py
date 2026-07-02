@@ -15,8 +15,12 @@ Endpoints:
 """
 
 import os, time, asyncio, uuid, json, logging
+from pathlib import Path
 from typing import List, Union, Optional, Dict, Any
 from collections import deque
+from dotenv import load_dotenv
+
+load_dotenv(Path(__file__).parent / ".env")
 
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import StreamingResponse
@@ -33,12 +37,13 @@ from loguru import logger
 # =========================
 # Config
 # =========================
-MODEL_NAME = os.getenv("MODEL_NAME", "gemma-3-12b-it")  # <--- UPDATE THIS TO YOUR MODEL NAME OR PATH
+MODEL_NAME = os.getenv("MODEL_NAME", "VECTORinc/UrduLLM-4B-Distilled")
 print(f"Using model: {MODEL_NAME}")
-# MODEL_NAME='/home/khan/musab_workspace/agri_accuracy_clones/demo dec 15/Agribot-Dev-Test/backend/LLM/models/UrduLLM-4B-RAFT-Merged-LATEST-v2'
 DTYPE = os.getenv("DTYPE", "bfloat16")
 
-MAX_MODEL_LEN = int(os.getenv("MAX_MODEL_LEN", "10000"))
+MAX_MODEL_LEN = int(os.getenv("MAX_MODEL_LEN", "4096"))
+GPU_MEM_UTIL = float(os.getenv("GPU_MEM_UTIL", "0.97"))
+CPU_OFFLOAD_GB = float(os.getenv("CPU_OFFLOAD_GB", "0"))
 
 # KV_CACHE_BYTES = int(os.getenv("KV_CACHE_BYTES", None))
 REQUEST_TIMEOUT_S = float(os.getenv("REQUEST_TIMEOUT_S", "600"))
@@ -222,7 +227,7 @@ async def _startup() -> None:
 
     MODEL_PATH = os.getenv(
         "MODEL_PATH",
-        "models/gemma-3-12b-it",
+        "/media/vector/Seagate-2TB/RBT/models/UrduLLM-4B-Distilled",
     )
 
     os.environ["TRANSFORMERS_OFFLINE"] = "1"
@@ -238,9 +243,10 @@ async def _startup() -> None:
         dtype=DTYPE,
         max_model_len=MAX_MODEL_LEN,
         enforce_eager=False,
-        gpu_memory_utilization=0.80,
+        gpu_memory_utilization=GPU_MEM_UTIL,
+        # cpu_offload_gb=CPU_OFFLOAD_GB,
         disable_log_stats=False,
-        tensor_parallel_size=int(os.getenv("TP_SIZE", "2")),
+        tensor_parallel_size=int(os.getenv("TP_SIZE", "1")),
         pipeline_parallel_size=int(os.getenv("PP_SIZE", "1")),
     )
 
